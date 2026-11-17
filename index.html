@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>글래스로그 (GlassLog) - 투명 잠금화면 캘린더 & 목표 기록</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+<script>
+tailwind.config = {
+theme: {
+extend: {
+fontFamily: {
+sans: ['"Noto Sans KR"', 'sans-serif'],
+display: ['"Jua"', 'sans-serif'],
+}
+}
+}
+}
+</script>
+<style>
+body {
+-webkit-tap-highlight-color: transparent;
+font-family: 'Noto Sans KR', sans-serif;
+}
+
+/* 배경 프리셋 (어두운 배경 vs 밝은 배경) */
+.bg-night {
+background-image: linear-gradient(to bottom, rgba(15, 23, 42, 0.35), rgba(15, 23, 42, 0.65)),
+url('https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80');
+background-size: cover;
+background-position: center;
+}
+.bg-sunset {
+background-image: linear-gradient(to bottom, rgba(88, 28, 135, 0.2), rgba(15, 23, 42, 0.5)),
+url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80');
+background-size: cover;
+background-position: center;
+}
+.bg-pastel {
+background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.25), rgba(255, 241, 242, 0.4)),
+url('https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80');
+background-size: cover;
+background-position: center;
+}
+
+/* 투명 스타일 모드 */
+.style-pure {
+background: transparent !important;
+backdrop-filter: none !important;
+-webkit-backdrop-filter: none !important;
+border: none !important;
+box-shadow: none !important;
+}
+.style-glass-rose {
+background: rgba(255, 228, 230, 0.22);
+backdrop-filter: blur(14px);
+-webkit-backdrop-filter: blur(14px);
+border: 1px solid rgba(255, 255, 255, 0.35);
+}
+.style-glass-cream {
+background: rgba(254, 243, 199, 0.25);
+backdrop-filter: blur(14px);
+-webkit-backdrop-filter: blur(14px);
+border: 1px solid rgba(255, 255, 255, 0.4);
+}
+.style-glass-sky {
+background: rgba(224, 242, 254, 0.22);
+backdrop-filter: blur(14px);
+-webkit-backdrop-filter: blur(14px);
+border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+/* 스크롤바 숨김 */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* 프라이버시 블러 효과 */
+.privacy-blur {
+filter: blur(5px);
+user-select: none;
+transition: filter 0.3s ease;
+}
+
+/* 밝은 배경에서도 선명한 가독성을 위한 미세 텍스트 그림자 */
+.text-adaptive-shadow {
+text-shadow: 0 1px 6px rgba(0, 0, 0, 0.28);
+}
+.text-slate-800 .text-adaptive-shadow {
+text-shadow: 0 1px 4px rgba(255, 255, 255, 0.75);
+}
+</style>
+</head>
+<body class="bg-slate-900 min-h-screen flex flex-col lg:flex-row items-center justify-center p-3 sm:p-6 gap-6 select-none">
+
+<!-- 좌측/상단: 실시간 잠금화면 커스텀 컨트롤 패널 -->
+<div class="w-full max-w-sm lg:max-w-xs bg-slate-800/90 text-slate-200 p-5 rounded-3xl border border-slate-700 shadow-xl space-y-4">
+<div class="flex items-center justify-between">
+<h2 class="font-display text-lg text-white flex items-center gap-2">
+<span>🎨</span> 투명 잠금화면 설정
+</h2>
+<span class="text-[11px] px-2 py-0.5 bg-rose-500/20 text-rose-300 rounded-full border border-rose-500/30">실시간 미리보기</span>
+</div>
+
+<!-- 0. 레이아웃 스타일 선택 (3가지 핵심 시안 전환) -->
+<div>
+<label class="text-xs text-slate-400 block mb-1.5">0. 잠금화면 레이아웃 스타일 (3종)</label>
+<div class="space-y-1.5">
+<button onclick="setLayoutMode('all-in-one')" id="layout-btn-all-in-one" class="layout-btn w-full py-2 px-3 rounded-xl bg-rose-500/30 border border-rose-400 text-white text-xs text-left flex items-center justify-between transition">
+<span>📊 1. 올인원 투두 & 주간 바형</span>
+<span class="text-[10px] opacity-80">2단 컬러</span>
+</button>
+<button onclick="setLayoutMode('timeline')" id="layout-btn-timeline" class="layout-btn w-full py-2 px-3 rounded-xl bg-slate-700/70 hover:bg-slate-600 border border-slate-600 text-xs text-left flex items-center justify-between transition">
+<span>⏳ 2. 타임라인 + 체크리스트형</span>
+<span class="text-[10px] opacity-80">시간 중심</span>
+</button>
+<button onclick="setLayoutMode('minimal')" id="layout-btn-minimal" class="layout-btn w-full py-2 px-3 rounded-xl bg-slate-700/70 hover:bg-slate-600 border border-slate-600 text-xs text-left flex items-center justify-between transition">
+<span>🖼️ 3. 미니멀 투명 위젯형</span>
+<span class="text-[10px] opacity-80">배경 주인공</span>
+</button>
+</div>
+</div>
+
+<!-- 1. 배경화면 선택 (밝기 자동 반전 테스트) -->
+<div>
+<label class="text-xs text-slate-400 block mb-1.5">1. 내 스마트폰 배경화면 (글자색 자동 반전)</label>
+<div class="grid grid-cols-3 gap-2">
+<button onclick="setWallpaper('night', 'dark')" class="py-2 px-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-xs font-medium border border-slate-600 focus:ring-2 focus:ring-rose-400">
+🌌 밤하늘<br><span class="text-[10px] text-slate-400">(어두운 배경)</span>
+</button>
+<button onclick="setWallpaper('sunset', 'dark')" class="py-2 px-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-xs font-medium border border-slate-600 focus:ring-2 focus:ring-rose-400">
+🌅 노을바다<br><span class="text-[10px] text-slate-400">(감성 배경)</span>
+</button>
+<button onclick="setWallpaper('pastel', 'light')" class="py-2 px-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-xs font-medium border border-slate-600 focus:ring-2 focus:ring-rose-400">
+🌸 벚꽃하늘<br><span class="text-[10px] text-slate-400">(밝은 배경)</span>
+</button>
+</div>
+</div>
+
+<!-- 2. 투명도 & 글래스 무드 선택 -->
+<div>
+<label class="text-xs text-slate-400 block mb-1.5">2. 유리 질감 & 투명도 무드</label>
+<div class="grid grid-cols-2 gap-2">
+<button onclick="setGlassMood('pure')" class="py-2 px-3 rounded-xl bg-slate-700/70 hover:bg-slate-600 text-xs text-left flex items-center gap-2 border border-slate-600">
+<span>✨</span> 순수 투명 모드
+</button>
+<button onclick="setGlassMood('glass-rose')" class="py-2 px-3 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-xs text-left flex items-center gap-2 border border-rose-400/30 text-rose-200">
+<span>🌷</span> 로즈 틴트 글래스
+</button>
+<button onclick="setGlassMood('glass-cream')" class="py-2 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-xs text-left flex items-center gap-2 border border-amber-400/30 text-amber-200">
+<span>🧈</span> 크림 틴트 글래스
+</button>
+<button onclick="setGlassMood('glass-sky')" class="py-2 px-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-xs text-left flex items-center gap-2 border border-sky-400/30 text-sky-200">
+<span>☁️</span> 스카이 틴트 글래스
+</button>
+</div>
+</div>
+
+<!-- 3. 잠금화면 이미지 저장 시뮬레이션 -->
+<div class="pt-1">
+<button onclick="simulateWallpaperExport()" class="w-full py-2.5 bg-gradient-to-r from-rose-400 to-pink-500 hover:from-rose-500 hover:to-pink-600 text-white font-display text-sm rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2">
+<span>🖼️</span> 잠금화면 배경 이미지로 자동 합성
+</button>
+<p id="export-toast" class="text-[11px] text-center text-emerald-300 mt-1.5 h-4 opacity-0 transition-opacity">
+✨ 고화질 잠금화면 위젯 이미지가 생성되었습니다!
+</p>
+</div>
+</div>
+
+<!-- 중앙: 스마트폰 잠금화면 목업 프레임 -->
+<div id="phone-screen" class="bg-night w-full max-w-sm rounded-[44px] shadow-2xl border-[5px] border-slate-800 overflow-hidden flex flex-col h-[86vh] max-h-[850px] relative transition-all duration-500 text-white">
+
+<!-- 상단 상태바 & 다이나믹 아일랜드 -->
+<div class="w-full pt-3 px-6 pb-1 flex justify-between items-center text-xs font-medium opacity-90 shrink-0">
+<span>SKT 5G</span>
+<div class="w-24 h-5 bg-black rounded-full absolute left-1/2 -translate-x-1/2 top-2.5"></div>
+<div class="flex items-center gap-1.5">
+<button onclick="togglePrivacy()" id="privacy-toggle-btn" class="px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-[10px] font-bold hover:bg-white/30 transition">
+👁️ 보임
+</button>
+<span>🔋 94%</span>
+</div>
+</div>
+
+<!-- 잠금화면 대형 시계 & D-Day 카운터 -->
+<div class="px-6 pt-3 pb-2 text-center shrink-0">
+<div class="flex items-center justify-center gap-2 text-xs font-medium opacity-90 mb-0.5">
+<span>11월 17일 화요일</span>
+<span>•</span>
+<span class="px-2 py-0.5 rounded-full bg-rose-500/80 text-white text-[10px] font-bold shadow-sm">
+🎯 바디프로필 D-14
+</span>
+</div>
+<div id="lock-clock" class="text-5xl font-bold tracking-tight drop-shadow-sm font-sans">
+20:52
+</div>
+</div>
+
+<!-- 메인 스크롤 영역 (투명 유리 위젯들) -->
+<main class="flex-1 overflow-y-auto no-scrollbar px-4 py-2 space-y-3 text-adaptive-shadow">
+
+<!-- 1. 목표(Goal) 트래커 & 진행률 바 -->
+<section class="glass-widget style-glass-rose rounded-3xl p-3.5 transition-all duration-300">
+<div class="flex justify-between items-center text-xs mb-1.5">
+<span class="font-bold flex items-center gap-1">🔥 11월 운동 루틴 목표</span>
+<span id="goal-percent-text" class="font-bold">18/30일 (60%)</span>
+</div>
+<div class="w-full h-2 bg-black/20 rounded-full overflow-hidden">
+<div id="goal-progress-bar" class="h-full bg-gradient-to-r from-rose-400 to-amber-300 rounded-full transition-all duration-500" style="width: 60%;"></div>
+</div>
+</section>
+
+<!-- 2. 미니멀 캘린더 (주간 연속 일정 바 + 월간 포토 썸네일) -->
+<section class="glass-widget style-glass-rose rounded-3xl p-3.5 transition-all duration-300">
+<div class="flex justify-between items-center mb-2">
+<div class="flex items-center gap-2">
+<span class="font-display text-sm">11월 캘린더</span>
+<button onclick="toggleCalendarView()" id="cal-view-btn" class="text-[10px] px-2 py-0.5 rounded-full bg-white/20 hover:bg-white/30">
+주간/월간 전환
+</button>
+</div>
+<!-- 데일리 포토 기록 버튼 -->
+<label class="cursor-pointer text-[10px] px-2.5 py-1 rounded-full bg-white/25 hover:bg-white/40 font-medium flex items-center gap-1 transition">
+<span>📸 오늘 사진 쏙</span>
+<input type="file" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
+</label>
+</div>
+
+<!-- 캘린더 그리드 -->
+<div id="calendar-container" class="grid grid-cols-7 gap-1 text-center">
+<!-- JS 렌더링 -->
+</div>
+
+<!-- 주간 연속 일정 컬러 막대(Bar) 영역 -->
+<div id="weekly-bars-container" class="mt-2 pt-1.5 border-t border-white/15 space-y-1">
+<!-- JS 렌더링 -->
+</div>
+</section>
+
+<!-- 3. 레이아웃별 동적 일정 체크 영역 (올인원 2단 / 타임라인+체크 / 미니멀 요약) -->
+<section id="dynamic-schedule-section" class="glass-widget style-glass-rose rounded-3xl p-3.5 transition-all duration-300">
+<!-- JS 렌더링 -->
+</section>
+
+<!-- 4. 초간편 기록: 원터치 이모지 도장 & 한 줄 로그 -->
+<section class="glass-widget style-glass-rose rounded-3xl p-3.5 transition-all duration-300">
+<div class="flex justify-between items-center mb-2">
+<span class="font-display text-sm">원터치 상태 & 한 줄 로그</span>
+<span class="text-[10px] opacity-75">터치 시 즉시 타임스탬프 기록</span>
+</div>
+
+<!-- 원터치 스티커(이모지) 태그 바 -->
+<div class="flex justify-between gap-1 mb-2.5">
+<button onclick="quickStamp('💪', '오운완! 운동 루틴 달성')" class="flex-1 py-1.5 rounded-2xl bg-white/15 hover:bg-white/30 active:scale-90 transition text-center">
+<div class="text-base">💪</div>
+<div class="text-[9px] opacity-90">운동</div>
+</button>
+<button onclick="quickStamp('💻', '집중 업무 타임 완료')" class="flex-1 py-1.5 rounded-2xl bg-white/15 hover:bg-white/30 active:scale-90 transition text-center">
+<div class="text-base">💻</div>
+<div class="text-[9px] opacity-90">업무</div>
+</button>
+<button onclick="quickStamp('☕', '잠시 커피 타임 & 휴식')" class="flex-1 py-1.5 rounded-2xl bg-white/15 hover:bg-white/30 active:scale-90 transition text-center">
+<div class="text-base">☕</div>
+<div class="text-[9px] opacity-90">휴식</div>
+</button>
+<button onclick="quickStamp('📖', '오늘의 독서 & 공부 기록')" class="flex-1 py-1.5 rounded-2xl bg-white/15 hover:bg-white/30 active:scale-90 transition text-center">
+<div class="text-base">📖</div>
+<div class="text-[9px] opacity-90">공부</div>
+</button>
+<button onclick="quickStamp('✨', '오늘 하루 기분 최고!')" class="flex-1 py-1.5 rounded-2xl bg-white/15 hover:bg-white/30 active:scale-90 transition text-center">
+<div class="text-base">✨</div>
+<div class="text-[9px] opacity-90">기분좋음</div>
+</button>
+</div>
+
+<!-- 타임스탬프 한 줄 로그 목록 -->
+<div id="log-timeline" class="space-y-1 max-h-24 overflow-y-auto no-scrollbar text-xs">
+<!-- JS 렌더링 -->
+</div>
+</section>
+
+</main>
+
+<!-- 하단: 제로 프릭션 퀵 입력바 (카테고리 선택 + 중요 별표 + 한줄입력) -->
+<footer class="p-3 pt-1 shrink-0">
+<form id="quick-log-form" class="flex items-center gap-1 bg-white/25 backdrop-blur-md p-1.5 rounded-2xl border border-white/30">
+<button type="button" id="star-toggle-btn" onclick="toggleNewImportant()" title="중요 일정 별표 고정" class="w-7 h-7 rounded-xl flex items-center justify-center text-xs bg-white/10 hover:bg-white/25 transition shrink-0">
+☆
+</button>
+<button type="button" id="cat-toggle-btn" onclick="toggleNewCategory()" title="카테고리 전환 (업무/루틴)" class="px-1.5 h-7 rounded-xl flex items-center justify-center text-[10px] font-bold bg-sky-500/30 text-sky-100 border border-sky-300/30 transition shrink-0">
+업무
+</button>
+<input type="text" id="quick-input" placeholder="+ 오늘 일정 또는 한 줄 기록..."
+class="flex-1 min-w-0 bg-transparent text-xs px-1.5 py-1.5 focus:outline-none placeholder:text-current placeholder:opacity-75">
+<button type="submit" class="px-2.5 py-1.5 bg-white text-slate-900 font-display text-xs rounded-xl shadow-sm hover:bg-rose-50 active:scale-95 transition shrink-0">
+기록
+</button>
+</form>
+</footer>
+
+</div>
+
+<script>
+// 앱 상태 데이터
+let isPrivacyBlur = false;
+let isMonthlyView = false;
+let currentLayout = 'all-in-one'; // 'all-in-one' | 'timeline' | 'minimal'
+let isMinimalExpanded = false;
+let currentMood = 'glass-rose';
+let newTodoImportant = false;
+let newTodoCategory = 'work'; // 'work' (업무/공부) | 'routine' (운동/생활)
+let goalDays = 18;
+const totalGoalDays = 30;
+let todayPhotoUrl = 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=200&q=80';
+
+// 초기 할 일 목록 (카테고리 & 시간 정보 포함)
+let todos = [
+{ id: 1, text: '아침 공복 유산소 30분', category: 'routine', time: '07:30', important: true, completed: true },
+{ id: 2, text: '클라이언트 미팅 & 시안 공유', category: 'work', time: '10:00', important: true, completed: false },
+{ id: 3, text: '기획서 최종 피드백 반영', category: 'work', time: '14:30', important: false, completed: false },
+{ id: 4, text: '물 2L 마시기 & 비타민', category: 'routine', time: '16:00', important: false, completed: true },
+{ id: 5, text: '저녁 헬스장 근력 루틴', category: 'routine', time: '19:30', important: false, completed: false },
+{ id: 6, text: '영문 아티클 1편 독서', category: 'work', time: '21:30', important: false, completed: false }
+ ];
+
+// 초기 한 줄 타임스탬프 로그
+let logs = [
+{ time: '08:30', emoji: '🏃‍♀️', text: '모닝 러닝 완료! 상쾌한 시작' },
+{ time: '13:15', emoji: '☕', text: '점심 식사 후 아이스 아메리카노' }
+ ];
+
+// 1. 실시간 시계 업데이트
+function updateClock() {
+const now = new Date();
+const h = String(now.getHours()).padStart(2, '0');
+const m = String(now.getMinutes()).padStart(2, '0');
+document.getElementById('lock-clock').textContent = ${h}:${m};
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// 2. 배경화면 변경 & 밝기에 따른 텍스트 자동 반전
+function setWallpaper(bgClass, brightness) {
+const screen = document.getElementById('phone-screen');
+screen.classList.remove('bg-night', 'bg-sunset', 'bg-pastel');
+screen.classList.add(bg-${bgClass}`);
+
+if (brightness === 'light') {
+// 밝은 배경 -> 다크 차콜 글자색
+screen.classList.remove('text-white');
+screen.classList.add('text-slate-800');
+} else {
+// 어두운 배경 -> 화이트 글자색
+screen.classList.remove('text-slate-800');
+screen.classList.add('text-white');
+}
+}
+
+// 3. 유리 질감 & 투명도 무드 변경
+function setGlassMood(mood) {
+currentMood = mood;
+const widgets = document.querySelectorAll('.glass-widget');
+widgets.forEach(w => {
+w.classList.remove('style-pure', 'style-glass-rose', 'style-glass-cream', 'style-glass-sky');
+w.classList.add(style-${mood}`);
+});
+}
+
+// 3-1. 레이아웃 모드 변경 (3가지 스타일)
+function setLayoutMode(mode) {
+currentLayout = mode;
+document.querySelectorAll('.layout-btn').forEach(btn => {
+btn.classList.remove('bg-rose-500/30', 'border-rose-400', 'text-white');
+btn.classList.add('bg-slate-700/70', 'border-slate-600');
+});
+const activeBtn = document.getElementById(layout-btn-${mode}`);
+if (activeBtn) {
+activeBtn.classList.remove('bg-slate-700/70', 'border-slate-600');
+activeBtn.classList.add('bg-rose-500/30', 'border-rose-400', 'text-white');
+}
+renderCalendar();
+renderScheduleSection();
+}
+
+// 4. 프라이버시 블러(가림막) 토글
+function togglePrivacy() {
+isPrivacyBlur = !isPrivacyBlur;
+const btn = document.getElementById('privacy-toggle-btn');
+btn.textContent = isPrivacyBlur ? '🔒 블러잠금' : '👁️ 보임';
+renderScheduleSection();
+renderLogs();
+}
+
+// 5. 캘린더 주간/월간 전환 & 렌더링 (연속 일정 바 포함)
+function toggleCalendarView() {
+isMonthlyView = !isMonthlyView;
+renderCalendar();
+}
+
+function renderCalendar() {
+const container = document.getElementById('calendar-container');
+const barsContainer = document.getElementById('weekly-bars-container');
+const daysHeader = ['일', '월', '화', '수', '목', '금', '토'];
+let html = daysHeader.map(d => <div class="text-[10px] opacity-70 font-bold pb-1"&gt;${d}</div>`).join('');
+
+const startDay = isMonthlyView ? 1 : 15;
+const endDay = isMonthlyView ? 30 : 21;
+
+for (let d = startDay; d <= endDay; d++) {
+const isToday = d === 17;
+const hasEvent = [3, 7, 12, 15, 17, 19, 24, 28].includes(d);
+const goalAchieved = [2, 5, 8, 10, 14, 16, 17].includes(d);
+
+if (isToday) {
+html += &lt;div class="relative h-9 rounded-xl overflow-hidden flex flex-col items-center justify-center border-2 border-rose-300 shadow-sm font-bold text-white" style="background-image: linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url('${todayPhotoUrl}'); background-size: cover; background-position: center;">
+<span class="text-xs z-10">${d}&lt;/span&gt; &lt;span class="w-1.5 h-1.5 rounded-full bg-rose-400 z-10"&gt;&lt;/span&gt; &lt;/div&gt;;
+} else {
+html += &lt;div class="h-9 rounded-xl flex flex-col items-center justify-center relative transition ${goalAchieved ? 'bg-rose-400/25 border border-rose-300/35' : 'hover:bg-white/10'}">
+<span class="text-xs ${goalAchieved ? 'font-bold' : 'opacity-90'}"&gt;${d}</span>
+${hasEvent ? '&lt;span class="w-1 h-1 rounded-full bg-amber-300 mt-0.5"&gt;&lt;/span&gt;' : '&lt;span class="h-1 mt-0.5"&gt;&lt;/span&gt;'} &lt;/div&gt;;
+}
+}
+container.innerHTML = html;
+
+// 주간 보기일 때 연속 일정 컬러 막대(Bar) & +2 요약 표시
+if (!isMonthlyView) {
+barsContainer.classList.remove('hidden');
+if (currentLayout === 'timeline') {
+// 타임라인형: 핵심 일정 바 2줄만 여백 있게 배치
+barsContainer.innerHTML = &lt;div class="grid grid-cols-7 gap-1 text-[9px] font-medium"&gt; &lt;div class="col-span-4 bg-sky-400/35 border border-sky-300/40 rounded-md px-1.5 py-0.5 truncate"&gt;🚀 신규 앱 UI 디자인 주간&lt;/div&gt; &lt;div class="col-start-6 col-span-2 bg-rose-400/35 border border-rose-300/40 rounded-md px-1.5 py-0.5 truncate"&gt;🧘‍♀️ 주말 힐링 캠프&lt;/div&gt; &lt;/div&gt;;
+} else {
+// 올인원 / 미니멀형: 연속 일정 바 + +2 요약 배지
+barsContainer.innerHTML = &lt;div class="grid grid-cols-7 gap-1 text-[9px] font-medium items-center"&gt; &lt;div class="col-span-4 bg-indigo-400/40 border border-indigo-300/40 rounded-md px-1.5 py-0.5 truncate"&gt;💻 프로젝트 스프린트&lt;/div&gt; &lt;div class="col-span-2 bg-rose-400/40 border border-rose-300/40 rounded-md px-1.5 py-0.5 truncate"&gt;🔥 바프 식단&lt;/div&gt; &lt;div class="col-span-1 text-center bg-white/20 rounded-md py-0.5 font-bold"&gt;+2&lt;/div&gt; &lt;/div&gt; &lt;div class="grid grid-cols-7 gap-1 text-[9px] font-medium items-center"&gt; &lt;div class="col-start-3 col-span-3 bg-emerald-400/35 border border-emerald-300/40 rounded-md px-1.5 py-0.5 truncate"&gt;📚 독서 모임 주간&lt;/div&gt; &lt;div class="col-start-6 col-span-2 text-right pr-1 opacity-80 font-bold"&gt;+3 일정&lt;/div&gt; &lt;/div&gt;;
+}
+} else {
+barsContainer.classList.add('hidden');
+}
+}
+
+// 오늘 사진 썸네일 업로드 핸들러
+function handlePhotoUpload(event) {
+const file = event.target.files[0];
+if (!file) return;
+const reader = new FileReader();
+reader.onload = function(e) {
+todayPhotoUrl = e.target.result;
+renderCalendar();
+quickStamp('📸', '오늘의 데일리 포토 캘린더에 등록');
+};
+reader.readAsDataURL(file);
+}
+
+// 6. 레이아웃별 일정 체크 섹션 렌더링
+function renderScheduleSection() {
+const section = document.getElementById('dynamic-schedule-section');
+const sorted = [...todos].sort((a, b) => (b.important - a.important) || (a.completed - b.completed));
+const doneCount = todos.filter(t => t.completed).length;
+
+if (currentLayout === 'all-in-one') {
+// [스타일 1] 올인원 투두 & 주간 바형 (하단 2단 컬러 체크리스트)
+const workTodos = sorted.filter(t => t.category === 'work');
+const routineTodos = sorted.filter(t => t.category === 'routine');
+
+section.innerHTML = &lt;div class="flex justify-between items-center mb-2"&gt; &lt;span class="font-display text-sm"&gt;오늘의 2단 컬러 체크&lt;/span&gt; &lt;span class="text-[11px] opacity-80"&gt;${doneCount}/${todos.length} 완료&lt;/span&gt; &lt;/div&gt; &lt;div class="grid grid-cols-2 gap-2"&gt; &lt;!-- 왼쪽 열: 업무·공부 (파랑/보라 체크박스) --&gt; &lt;div class="bg-indigo-500/15 border border-indigo-300/25 rounded-2xl p-2 space-y-1.5"&gt; &lt;div class="text-[10px] font-bold text-indigo-200 flex items-center gap-1 pb-0.5 border-b border-white/10"&gt; &lt;span&gt;📘&lt;/span&gt; 업무 · 공부 &lt;/div&gt; ${workTodos.map(t => renderTodoItemCompact(t, 'indigo')).join('')}
+</div>
+<!-- 오른쪽 열: 운동·생활 루틴 (분홍/민트 체크박스) -->
+<div class="bg-rose-500/15 border border-rose-300/25 rounded-2xl p-2 space-y-1.5">
+<div class="text-[10px] font-bold text-rose-200 flex items-center gap-1 pb-0.5 border-b border-white/10">
+<span>🌷</span> 운동 · 루틴
+</div>
+${routineTodos.map(t =&gt; renderTodoItemCompact(t, 'rose')).join('')} &lt;/div&gt; &lt;/div&gt;;
+} else if (currentLayout === 'timeline') {
+// [스타일 2] 타임라인 + 체크리스트 결합형 (좌우 분할)
+const timedTodos = [...todos].sort((a, b) => a.time.localeCompare(b.time)).slice(0, 4);
+section.innerHTML = &lt;div class="flex justify-between items-center mb-2"&gt; &lt;span class="font-display text-sm"&gt;타임라인 & 투두 분할&lt;/span&gt; &lt;span class="text-[11px] opacity-80"&gt;${doneCount}/${todos.length} 완료&lt;/span&gt; &lt;/div&gt; &lt;div class="grid grid-cols-2 gap-2.5"&gt; &lt;!-- 왼쪽: 세로선 시간대별 타임라인 --&gt; &lt;div class="border-r border-white/20 pr-2 space-y-2 relative"&gt; &lt;div class="text-[10px] font-bold opacity-80 mb-1"&gt;⏰ 시간 일정&lt;/div&gt; ${timedTodos.map(t => &lt;div onclick="toggleTodo(${t.id})" class="flex items-start gap-1.5 cursor-pointer {t.time}</span>
+<div class="border-l-2 border-amber-300/60 pl-1.5 text-[11px] leading-tight truncate {isPrivacyBlur ? 'privacy-blur' : ''}">
+latex
+{t.text} &lt;/div&gt; &lt;/div&gt; `).join('')} &lt;/div&gt; &lt;!-- 오른쪽: 자유 체크리스트 --&gt; &lt;div class="space-y-1.5"&gt; &lt;div class="text-[10px] font-bold opacity-80 mb-1"&gt;✅ 할 일 체크&lt;/div&gt; 
+
+{sorted.slice(0, 4).map(t => renderTodoItemCompact(t, t.category === 'work' ? 'indigo' : 'rose')).join('')}
+</div>
+</div>
+; } else { // [스타일 3] 미니멀 투명 위젯형 (핵심 6개 요약 + 펼치기) const visibleTodos = isMinimalExpanded ? sorted : sorted.slice(0, 4); section.innerHTML =
+<div class="flex justify-between items-center mb-2">
+<span class="font-display text-sm">핵심 일정 요약</span>
+<button onclick="toggleMinimalExpand()" class="text-[10px] px-2 py-0.5 rounded-full bg-white/20 hover:bg-white/30">
+latex
+{isMinimalExpanded ? '접기 ▲' : `전체 펼치기 (
+
+{todos.length}) ▼} &lt;/button&gt; &lt;/div&gt; &lt;div class="space-y-1.5"&gt; ${visibleTodos.map(todo => &lt;div onclick="toggleTodo(${todo.id})"
+class="flex items-center justify-between py-1.5 px-2.5 rounded-xl cursor-pointer transition-all {todo.id})" class="text-xs shrink-0 {todo.important ? '★' : '☆'}
+</button>
+<span class="text-xs truncate {isPrivacyBlur ? 'privacy-blur' : ''}">
+{todo.completed ? 'bg-rose-400 border-rose-400 text-white' : 'border-current opacity-60'}">
+${todo.completed ? '✓' : ''} &lt;/div&gt; &lt;/div&gt;).join('')}
+</div>
+`;
+}
+}
+
+function renderTodoItemCompact(todo, colorTheme) {
+const checkBg = colorTheme === 'indigo' ? 'bg-indigo-400 border-indigo-400' : 'bg-rose-400 border-rose-400';
+return &lt;div onclick="toggleTodo(${todo.id})" class="flex items-center justify-between gap-1.5 py-1 px-1.5 rounded-lg cursor-pointer transition {todo.id})" class="text-[10px] shrink-0 {todo.important ? '★' : '☆'}
+</span>
+<span class="text-[11px] truncate {isPrivacyBlur ? 'privacy-blur' : ''}">
+{todo.completed ? ${checkBg} text-white: 'border-current opacity-60'}"&gt;${todo.completed ? '✓' : ''}
+</div>
+</div>
+`;
+}
+
+function toggleMinimalExpand() {
+isMinimalExpanded = !isMinimalExpanded;
+renderScheduleSection();
+}
+
+function toggleTodo(id) {
+todos = todos.map(t => {
+if (t.id === id) {
+const nextState = !t.completed;
+if (t.text.includes('유산소') || t.text.includes('운동') || t.text.includes('헬스')) {
+goalDays = nextState ? Math.min(totalGoalDays, goalDays + 1) : Math.max(0, goalDays - 1);
+updateGoalBar();
+}
+return { ...t, completed: nextState };
+}
+return t;
+});
+renderScheduleSection();
+}
+
+function toggleStar(id) {
+todos = todos.map(t => t.id === id ? { ...t, important: !t.important } : t);
+renderScheduleSection();
+}
+
+// 5. 캘린더 주간/월간 전환 & 렌더링
+function toggleCalendarView() {
+isMonthlyView = !isMonthlyView;
+renderCalendar();
+}
+
+function renderCalendar() {
+const container = document.getElementById('calendar-container');
+const daysHeader = ['일', '월', '화', '수', '목', '금', '토'];
+let html = daysHeader.map(d => <div class="text-[10px] opacity-70 font-bold pb-1"&gt;${d}</div>`).join('');
+
+// 주간(15~21일) 또는 월간(1~30일)
+const startDay = isMonthlyView ? 1 : 15;
+const endDay = isMonthlyView ? 30 : 21;
+
+for (let d = startDay; d <= endDay; d++) {
+const isToday = d === 17;
+const hasEvent = [3, 7, 12, 15, 17, 19, 24, 28].includes(d);
+const goalAchieved = [2, 5, 8, 10, 14, 16, 17].includes(d);
+
+if (isToday) {
+// 오늘 날짜: 데일리 포토 썸네일이 배경으로 은은하게 깔림
+html += &lt;div class="relative h-9 rounded-xl overflow-hidden flex flex-col items-center justify-center border border-rose-300 shadow-sm font-bold text-white" style="background-image: linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url('${todayPhotoUrl}'); background-size: cover; background-position: center;">
+<span class="text-xs z-10">latex
+{d}&lt;/span&gt; &lt;span class="w-1.5 h-1.5 rounded-full bg-rose-400 z-10"&gt;&lt;/span&gt; &lt;/div&gt; `; } else { html += ` &lt;div class="h-9 rounded-xl flex flex-col items-center justify-center relative transition 
+
+{goalAchieved ? 'bg-rose-400/30 border border-rose-300/40' : 'hover:bg-white/10'}">
+<span class="text-xs {d}</span>
+${hasEvent ? '&lt;span class="w-1 h-1 rounded-full bg-amber-300 mt-0.5"&gt;&lt;/span&gt;' : '&lt;span class="h-1 mt-0.5"&gt;&lt;/span&gt;'} &lt;/div&gt;;
+}
+}
+container.innerHTML = html;
+}
+
+// 오늘 사진 썸네일 업로드 핸들러
+function handlePhotoUpload(event) {
+const file = event.target.files[0];
+if (!file) return;
+const reader = new FileReader();
+reader.onload = function(e) {
+todayPhotoUrl = e.target.result;
+renderCalendar();
+quickStamp('📸', '오늘의 데일리 포토 캘린더에 등록');
+};
+reader.readAsDataURL(file);
+}
+
+// 6. 일정 체크(To-Do) 렌더링 & 액션
+function renderTodos() {
+const list = document.getElementById('todo-list');
+// 중요(★) 일정 최상단 정렬, 완료된 항목은 하단으로 자연스럽게 배치
+const sorted = [...todos].sort((a, b) => (b.important - a.important) || (a.completed - b.completed));
+
+const doneCount = todos.filter(t => t.completed).length;
+document.getElementById('todo-summary').textContent = ``${doneCount}/${todos.length} 완료;
+
+list.innerHTML = sorted.map(todo => &lt;div onclick="toggleTodo(${todo.id})"
+class="flex items-center justify-between p-2 rounded-2xl cursor-pointer transition-all {todo.id})" class="text-xs shrink-0 {todo.important ? '★' : '☆'}
+</button>
+<span class="text-xs truncate {isPrivacyBlur ? 'privacy-blur' : ''}">
+{todo.completed ? 'bg-rose-400 border-rose-400 text-white' : 'border-current opacity-60'}">
+${todo.completed ? '✓' : ''} &lt;/div&gt; &lt;/div&gt;).join('');
+}
+
+function toggleTodo(id) {
+todos = todos.map(t => {
+if (t.id === id) {
+const nextState = !t.completed;
+// 운동 관련 일정 완료 시 목표 게이지 상승 연동
+if (t.text.includes('유산소') || t.text.includes('운동')) {
+goalDays = nextState ? Math.min(totalGoalDays, goalDays + 1) : Math.max(0, goalDays - 1);
+updateGoalBar();
+}
+return { ...t, completed: nextState };
+}
+return t;
+});
+renderTodos();
+}
+
+function toggleStar(id) {
+todos = todos.map(t => t.id === id ? { ...t, important: !t.important } : t);
+renderTodos();
+}
+
+function updateGoalBar() {
+const pct = Math.round((goalDays / totalGoalDays) * 100);
+document.getElementById('goal-percent-text').textContent = ``${goalDays}/{pct}%); document.getElementById('goal-progress-bar').style.width =${pct}%;
+}
+
+// 7. 원터치 이모지 도장 & 한 줄 로그 기록
+function quickStamp(emoji, label) {
+const now = new Date();
+const timeStr = ``${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')};
+logs.unshift({ time: timeStr, emoji, text: label });
+
+if (emoji === '💪') {
+goalDays = Math.min(totalGoalDays, goalDays + 1);
+updateGoalBar();
+}
+renderLogs();
+}
+
+function renderLogs() {
+const container = document.getElementById('log-timeline');
+container.innerHTML = logs.map(log => &lt;div class="flex items-center gap-2 py-1 px-2 rounded-xl bg-black/10"&gt; &lt;span class="text-[10px] font-mono opacity-75 shrink-0"&gt;${log.time}</span>
+<span class="shrink-0">{isPrivacyBlur ? 'privacy-blur' : ''}">${log.text}&lt;/span&gt; &lt;/div&gt;).join('');
+}
+
+// 하단 퀵 입력 처리
+function toggleNewImportant() {
+newTodoImportant = !newTodoImportant;
+const btn = document.getElementById('star-toggle-btn');
+btn.textContent = newTodoImportant ? '★' : '☆';
+btn.classList.toggle('text-amber-300', newTodoImportant);
+}
+
+function toggleNewCategory() {
+newTodoCategory = newTodoCategory === 'work' ? 'routine' : 'work';
+const btn = document.getElementById('cat-toggle-btn');
+if (newTodoCategory === 'work') {
+btn.textContent = '업무';
+btn.className = 'px-1.5 h-7 rounded-xl flex items-center justify-center text-[10px] font-bold bg-sky-500/30 text-sky-100 border border-sky-300/30 transition shrink-0';
+} else {
+btn.textContent = '루틴';
+btn.className = 'px-1.5 h-7 rounded-xl flex items-center justify-center text-[10px] font-bold bg-rose-500/30 text-rose-100 border border-rose-300/30 transition shrink-0';
+}
+}
+
+document.getElementById('quick-log-form').addEventListener('submit', (e) => {
+e.preventDefault();
+const input = document.getElementById('quick-input');
+const text = input.value.trim();
+if (!text) return;
+
+const now = new Date();
+const timeStr = ``${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+todos.unshift({
+id: Date.now(),
+text: text,
+category: newTodoCategory,
+time: timeStr,
+important: newTodoImportant,
+completed: false
+});
+
+logs.unshift({ time: timeStr, emoji: newTodoImportant ? '⭐' : '📝', text: text });
+
+input.value = '';
+if (newTodoImportant) toggleNewImportant();
+renderScheduleSection();
+renderLogs();
+});
+
+// 잠금화면 이미지 자동 합성 시뮬레이션
+function simulateWallpaperExport() {
+const toast = document.getElementById('export-toast');
+toast.classList.remove('opacity-0');
+setTimeout(() => {
+toast.classList.add('opacity-0');
+}, 3000);
+}
+
+// 초기 렌더링 실행
+renderCalendar();
+renderScheduleSection();
+renderLogs();
+</script>
+</body>
+</html>
